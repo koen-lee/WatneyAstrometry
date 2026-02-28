@@ -184,37 +184,27 @@ namespace WatneyAstrometry.Core.QuadDb
                         thisFileCache.Passes[passIndex].SubCells[subCellIdx].QuadsForSubset = new StarQuad[numSubSets][];
                     }
                     
-                    var quadCountInSubCell = subCellsInRangeArr[sc].DataLengthBytes / QuadDataLen;
-                    var quadCountPerSubSet = quadCountInSubCell / numSubSets;
-                    var quadSplitModulo = quadCountInSubCell % numSubSets;
-                    
-                    long streamReadOffset = subCellsInRangeArr[sc].DataStartPos +
-                                        subSetIndex * quadCountPerSubSet * QuadDataLen;
-                    
-                    var numberOfQuadsToRead = subSetIndex == numSubSets - 1 && quadSplitModulo > 0
-                        ? quadCountPerSubSet + quadSplitModulo // Add modulo quads to the last subset
-                        : quadCountPerSubSet;
-                    byte[] subSetDataBytes = new byte[numberOfQuadsToRead * QuadDataLen];
-                    
-                    fileStream.Seek(streamReadOffset, SeekOrigin.Begin);
-                    fileStream.ReadExactly(subSetDataBytes, 0, subSetDataBytes.Length);
-                    
-                    fixed (byte* pSubSetDataBytes = subSetDataBytes)
-                    {
-                        var quadCount = subCellsInRangeArr[sc].DataLengthBytes / QuadDataLen;
-                        // We will split the quadCount to numSubSets, and pick the quads in our assigned (sampling) subset.
-                        var quadCountPerSubSet = quadCount / numSubSets;
-                        var startIndex = quadCountPerSubSet * subSetIndex;
-                        var nextStartIndex = subSetIndex == numSubSets - 1
-                            ? quadCount
-                            : startIndex + quadCountPerSubSet;
 
-                        if (_fileFormatVersion == FileFormatVersionV3)
+                    var quadCount = subCellsInRangeArr[sc].DataLengthBytes / QuadDataLen;
+                    // We will split the quadCount to numSubSets, and pick the quads in our assigned (sampling) subset.
+                    var quadCountPerSubSet = quadCount / numSubSets;
+                    var startIndex = quadCountPerSubSet * subSetIndex;
+                    var nextStartIndex = subSetIndex == numSubSets - 1
+                        ? quadCount
+                        : startIndex + quadCountPerSubSet;
+
+                    if (_fileFormatVersion == FileFormatVersionV3)
+                    {
+                        byte[] subCellDataBytes = new byte[subCellsInRangeArr[sc].DataLengthBytes];
+                        fileStream.Seek(subCellsInRangeArr[sc].DataStartPos, SeekOrigin.Begin);
+                        fileStream.ReadExactly(subCellDataBytes, 0, subCellDataBytes.Length);
+
+                        fixed (byte* pSubCellDataBytes = subCellDataBytes)
                         {
                             int advance = startIndex * QuadDataLen;
                             for (var q = startIndex; q < nextStartIndex; q++)
                             {
-                                var quad = BytesToQuadNew(pSubCellDataBytes, advance, imageQuads, _bytesNeedReversing);
+                                var quad = BytesToQuadNew(pSubCellDataBytes, advance, sortedImageQuads, _bytesNeedReversing);
 
                                 if (quad != null)
                                     matchingQuads.Add(quad);
@@ -224,12 +214,23 @@ namespace WatneyAstrometry.Core.QuadDb
                                 advance += QuadDataLen;
                             }
                         }
-                        else
+                    }
+                    else
+                    {
+                        // v4: read only the ratio section (N×6 bytes). Float bytes are read lazily on match.
+                        int ratioByteCount = quadCount * 6;
+                        byte[] ratioBuf = new byte[ratioByteCount];
+                        fileStream.Seek(subCellsInRangeArr[sc].DataStartPos, SeekOrigin.Begin);
+                        fileStream.ReadExactly(ratioBuf, 0, ratioByteCount);
+                        long floatSectionBase = subCellsInRangeArr[sc].DataStartPos + ratioByteCount;
+
+                        fixed (byte* pRatioBuf = ratioBuf)
                         {
                             ProcessSubCellMergeJoin(
-                                pSubCellDataBytes, startIndex, nextStartIndex - startIndex, quadCount,
-                                imageQuads, _bytesNeedReversing,
+                                pRatioBuf, startIndex, nextStartIndex - startIndex, quadCount,
+                                sortedImageQuads, _bytesNeedReversing,
                                 center, angularDistance,
+                                fileStream, floatSectionBase,
                                 matchingQuads, matchingQuadsWithinRange);
                         }
                     }
@@ -259,7 +260,7 @@ namespace WatneyAstrometry.Core.QuadDb
         }
 
         private static unsafe void ProcessSubCellMergeJoin(
-            byte* pBuf,
+            byte* pBuf,            // ratio section only: totalQuads × 6 bytes, sorted by R0
             int startIndex,
             int count,
             int totalQuads,
@@ -267,15 +268,16 @@ namespace WatneyAstrometry.Core.QuadDb
             bool bytesNeedReversing,
             EquatorialCoords center,
             double angularDistance,
+            Stream fileStream,     // used only on the rare full match to read 12 float bytes
+            long floatSectionBase, // file offset of the start of the float section
             List<StarQuad> matchingQuads,
             List<StarQuad> matchingQuadsWithinRange)
         {
-            // v4 SoA layout within the subcell data block:
-            //   [0 .. totalQuads*6 - 1]         → ratio section (N × 6 bytes, sorted by R0)
-            //   [totalQuads*6 .. totalQuads*18]  → float section (N × 12 bytes, same order)
+            // pBuf contains the full ratio section (totalQuads × 6 bytes).
+            // Subset [startIndex, startIndex+count) sits at pBuf + startIndex*6.
             byte* pRatios = pBuf + startIndex * 6;
-            byte* pFloats = pBuf + totalQuads * 6 + startIndex * 12;
 
+            var floatBuf = new byte[12]; // allocated once; used only on a match (~0.0005%)
             int imgJ = 0; // lower-bound pointer into imageQuads; only ever advances
 
             for (int dbIdx = 0; dbIdx < count; dbIdx++)
@@ -315,24 +317,29 @@ namespace WatneyAstrometry.Core.QuadDb
                     if (imgQuad.Ratios.R3 < lo.R3 || imgQuad.Ratios.R3 > hi.R3) continue;
                     if (imgQuad.Ratios.R4 < lo.R4 || imgQuad.Ratios.R4 > hi.R4) continue;
 
-                    // Full match — decode float section on demand.
-                    byte* pF = pFloats + dbIdx * 12;
+                    // Full match — seek to and read the 12 float bytes for this quad.
+                    fileStream.Seek(floatSectionBase + (long)(startIndex + dbIdx) * 12, SeekOrigin.Begin);
+                    fileStream.ReadExactly(floatBuf, 0, 12);
+
                     float ld, ra, dec;
                     if (bytesNeedReversing)
                     {
-                        ld  = BitConverter.ToSingle(new byte[] { pF[3],  pF[2],  pF[1],  pF[0]  }, 0);
-                        ra  = BitConverter.ToSingle(new byte[] { pF[7],  pF[6],  pF[5],  pF[4]  }, 0);
-                        dec = BitConverter.ToSingle(new byte[] { pF[11], pF[10], pF[9],  pF[8]  }, 0);
+                        ld  = BitConverter.ToSingle(new byte[] { floatBuf[3],  floatBuf[2],  floatBuf[1],  floatBuf[0]  }, 0);
+                        ra  = BitConverter.ToSingle(new byte[] { floatBuf[7],  floatBuf[6],  floatBuf[5],  floatBuf[4]  }, 0);
+                        dec = BitConverter.ToSingle(new byte[] { floatBuf[11], floatBuf[10], floatBuf[9],  floatBuf[8]  }, 0);
                     }
                     else
                     {
                         // ARM misalignment workaround — read as int, reinterpret as float.
-                        var if1 = *(int*)pF; pF += sizeof(int);
-                        var if2 = *(int*)pF; pF += sizeof(int);
-                        var if3 = *(int*)pF;
-                        ld  = *(float*)&if1;
-                        ra  = *(float*)&if2;
-                        dec = *(float*)&if3;
+                        fixed (byte* pF = floatBuf)
+                        {
+                            var if1 = *(int*)pF;
+                            var if2 = *(int*)(pF + 4);
+                            var if3 = *(int*)(pF + 8);
+                            ld  = *(float*)&if1;
+                            ra  = *(float*)&if2;
+                            dec = *(float*)&if3;
+                        }
                     }
 
                     var quad = new StarQuad(dbRatios, ld, new EquatorialCoords(ra, dec));
