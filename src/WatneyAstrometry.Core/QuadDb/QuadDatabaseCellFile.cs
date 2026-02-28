@@ -29,8 +29,10 @@ namespace WatneyAstrometry.Core.QuadDb
         private readonly int _fileId;
 
         private bool _fileVersionValidated = false;
+        private int _fileFormatVersion = 0;
         private const string FileFormatIdentifierString = "WATNEYQDB";
-        private const int FileFormatVersion = 3;
+        private const int FileFormatVersionV3 = 3;
+        private const int FileFormatVersionV4 = 4;
         
         public QuadDatabaseCellFile(QuadDatabaseCellFileDescriptor descriptor, int fileId)
         {
@@ -157,10 +159,11 @@ namespace WatneyAstrometry.Core.QuadDb
                                     Array.Reverse(versionNumBytes);
 
                                 var versionNum = BitConverter.ToInt32(versionNumBytes, 0);
-                                if (versionNum != FileFormatVersion)
+                                if (versionNum != FileFormatVersionV3 && versionNum != FileFormatVersionV4)
                                     throw new QuadDatabaseVersionException(
-                                        $"Expected database version {FileFormatVersion} format database files, but they were version {versionNum}. " +
+                                        $"Expected database version {FileFormatVersionV3} or {FileFormatVersionV4} format database files, but they were version {versionNum}. " +
                                         $"Unable to use them. Make sure you have downloaded the right database files.");
+                                _fileFormatVersion = versionNum;
                             }
                         }
                         catch (FileNotFoundException)
@@ -198,17 +201,36 @@ namespace WatneyAstrometry.Core.QuadDb
                     
                     fixed (byte* pSubSetDataBytes = subSetDataBytes)
                     {
-                        int advance = 0;
-                        for (var q = 0; q < numberOfQuadsToRead; q++)
+                        var quadCount = subCellsInRangeArr[sc].DataLengthBytes / QuadDataLen;
+                        // We will split the quadCount to numSubSets, and pick the quads in our assigned (sampling) subset.
+                        var quadCountPerSubSet = quadCount / numSubSets;
+                        var startIndex = quadCountPerSubSet * subSetIndex;
+                        var nextStartIndex = subSetIndex == numSubSets - 1
+                            ? quadCount
+                            : startIndex + quadCountPerSubSet;
+
+                        if (_fileFormatVersion == FileFormatVersionV3)
                         {
-                            var quad = BytesToQuadNew(pSubSetDataBytes, advance, sortedImageQuads, _bytesNeedReversing);
-                            advance += QuadDataLen;
-                            if (quad == null)
-                                continue;
-                            
-                            matchingQuads.Add(quad);
-                            if (quad.MidPoint.GetAngularDistanceTo(center) < angularDistance)
-                                matchingQuadsWithinRange.Add(quad);
+                            int advance = startIndex * QuadDataLen;
+                            for (var q = startIndex; q < nextStartIndex; q++)
+                            {
+                                var quad = BytesToQuadNew(pSubCellDataBytes, advance, imageQuads, _bytesNeedReversing);
+
+                                if (quad != null)
+                                    matchingQuads.Add(quad);
+                                if (quad != null && quad.MidPoint.GetAngularDistanceTo(center) < angularDistance)
+                                    matchingQuadsWithinRange.Add(quad);
+
+                                advance += QuadDataLen;
+                            }
+                        }
+                        else
+                        {
+                            ProcessSubCellMergeJoin(
+                                pSubCellDataBytes, startIndex, nextStartIndex - startIndex, quadCount,
+                                imageQuads, _bytesNeedReversing,
+                                center, angularDistance,
+                                matchingQuads, matchingQuadsWithinRange);
                         }
                     }
                     
@@ -234,6 +256,92 @@ namespace WatneyAstrometry.Core.QuadDb
             return matchingQuadsWithinRange.ToArray();
 
             
+        }
+
+        private static unsafe void ProcessSubCellMergeJoin(
+            byte* pBuf,
+            int startIndex,
+            int count,
+            int totalQuads,
+            ImageStarQuad[] imageQuads,
+            bool bytesNeedReversing,
+            EquatorialCoords center,
+            double angularDistance,
+            List<StarQuad> matchingQuads,
+            List<StarQuad> matchingQuadsWithinRange)
+        {
+            // v4 SoA layout within the subcell data block:
+            //   [0 .. totalQuads*6 - 1]         → ratio section (N × 6 bytes, sorted by R0)
+            //   [totalQuads*6 .. totalQuads*18]  → float section (N × 12 bytes, same order)
+            byte* pRatios = pBuf + startIndex * 6;
+            byte* pFloats = pBuf + totalQuads * 6 + startIndex * 12;
+
+            int imgJ = 0; // lower-bound pointer into imageQuads; only ever advances
+
+            for (int dbIdx = 0; dbIdx < count; dbIdx++)
+            {
+                byte* pR = pRatios + dbIdx * 6;
+
+                // Decode R0 for the window check only.
+                float r0 = (((pR[1] << 8) & 0x3FF) + (pR[0] & 0x3FF)) * OnePer1023;
+                float lo0 = r0 * RatioMatchLow;
+                float hi0 = r0 * RatioMatchHigh;
+
+                // Advance imgJ past image quads whose R0 is below the window (never rewinds).
+                while (imgJ < imageQuads.Length && imageQuads[imgJ].Ratios.R0 < lo0)
+                    imgJ++;
+
+                if (imgJ >= imageQuads.Length) break; // all image quads exhausted
+
+                if (imageQuads[imgJ].Ratios.R0 > hi0) continue; // no candidate in window
+
+                // R0 window has at least one candidate — decode the remaining 4 ratios.
+                float r1 = ((((pR[2] & 0x0F) << 6) & 0x3FF) + ((pR[1] >> 2) & 0x3FF)) * OnePer1023;
+                float r2 = ((((pR[3] & 0x3F) << 4) & 0x3FF) + ((pR[2] >> 4) & 0x3FF)) * OnePer1023;
+                float r3 = ((((pR[4] & 0x7F) << 2) & 0x1FF) + ((pR[3] >> 6) & 0x1FF)) * OnePer511;
+                float r4 = (((pR[5]            << 1) & 0x1FF) + ((pR[4] >> 7) & 0x1FF)) * OnePer511;
+
+                var dbRatios = new QuadRatios(r0, r1, r2, r3, r4);
+                var lo = dbRatios * RatioMatchLow;
+                var hi = dbRatios * RatioMatchHigh;
+
+                for (int k = imgJ; k < imageQuads.Length; k++)
+                {
+                    var imgQuad = imageQuads[k];
+                    if (imgQuad.Ratios.R0 > hi0) break; // past R0 window
+
+                    if (imgQuad.Ratios.R1 < lo.R1 || imgQuad.Ratios.R1 > hi.R1) continue;
+                    if (imgQuad.Ratios.R2 < lo.R2 || imgQuad.Ratios.R2 > hi.R2) continue;
+                    if (imgQuad.Ratios.R3 < lo.R3 || imgQuad.Ratios.R3 > hi.R3) continue;
+                    if (imgQuad.Ratios.R4 < lo.R4 || imgQuad.Ratios.R4 > hi.R4) continue;
+
+                    // Full match — decode float section on demand.
+                    byte* pF = pFloats + dbIdx * 12;
+                    float ld, ra, dec;
+                    if (bytesNeedReversing)
+                    {
+                        ld  = BitConverter.ToSingle(new byte[] { pF[3],  pF[2],  pF[1],  pF[0]  }, 0);
+                        ra  = BitConverter.ToSingle(new byte[] { pF[7],  pF[6],  pF[5],  pF[4]  }, 0);
+                        dec = BitConverter.ToSingle(new byte[] { pF[11], pF[10], pF[9],  pF[8]  }, 0);
+                    }
+                    else
+                    {
+                        // ARM misalignment workaround — read as int, reinterpret as float.
+                        var if1 = *(int*)pF; pF += sizeof(int);
+                        var if2 = *(int*)pF; pF += sizeof(int);
+                        var if3 = *(int*)pF;
+                        ld  = *(float*)&if1;
+                        ra  = *(float*)&if2;
+                        dec = *(float*)&if3;
+                    }
+
+                    var quad = new StarQuad(dbRatios, ld, new EquatorialCoords(ra, dec));
+                    matchingQuads.Add(quad);
+                    if (quad.MidPoint.GetAngularDistanceTo(center) < angularDistance)
+                        matchingQuadsWithinRange.Add(quad);
+                    break; // one DB quad → at most one image-quad match
+                }
+            }
         }
 
         private const float OnePer1023 = 0.0009775171065493f; // (1 / 1023)
