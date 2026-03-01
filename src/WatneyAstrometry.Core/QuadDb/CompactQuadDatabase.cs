@@ -31,6 +31,19 @@ namespace WatneyAstrometry.Core.QuadDb
         /// </summary>
         public string DatabaseDirectory { get; private set; }
 
+        /// <summary>Number of V4 subcell ratio sections scanned since last <see cref="ResetCounters"/>.</summary>
+        public static long V4SubCellReads => QuadDatabaseCellFile.V4SubCellReads;
+
+        /// <summary>Number of V4 float-section reads (full ratio matches) since last <see cref="ResetCounters"/>.</summary>
+        public static long V4FloatFetches => QuadDatabaseCellFile.V4FloatFetches;
+
+        /// <summary>Resets the V4 diagnostic counters to zero.</summary>
+        public static void ResetCounters()
+        {
+            QuadDatabaseCellFile.V4SubCellReads = 0;
+            QuadDatabaseCellFile.V4FloatFetches = 0;
+        }
+
         /// <summary>
         /// New instance of quad database.
         /// </summary>

@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls /c/Dev/WatneyAstrometry/src/WatneyAstrometry.Core.Tests/*.cs)",
+      "Bash(grep -n \"BytesNeedReversing\" /c/Dev/WatneyAstrometry/src/WatneyAstrometry.Core/QuadDb/*.cs)",
+      "Bash(dotnet test src/WatneyAstrometry.Core.Tests/ --no-build)",
+      "Bash(dotnet test src/WatneyAstrometry.Core.Tests/)",
+      "Bash(dotnet build src/WatneyAstrometry.Core/ -c Release)"
+    ]
+  }
+}

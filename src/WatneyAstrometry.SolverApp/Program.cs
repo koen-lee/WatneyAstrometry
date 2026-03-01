@@ -103,6 +103,10 @@ namespace WatneyAstrometry.SolverApp
                 Console.WriteLine($"QUADFORMATION_DURATION: {_quadFormationStopwatch.Elapsed.TotalSeconds}");
                 Console.WriteLine($"SOLVE_DURATION: {_solveProcessStopwatch.Elapsed.TotalSeconds}");
                 Console.WriteLine($"FULL_DURATION: {stopwatch.Elapsed.TotalSeconds}");
+                Console.WriteLine($"V4 subcell reads: {CompactQuadDatabase.V4SubCellReads}");
+                Console.WriteLine($"V4 float fetches: {CompactQuadDatabase.V4FloatFetches}");
+// ratio = V4FloatFetches / (V4SubCellReads * avg_quads_per_subcell)
+
             }
             
             Environment.Exit(0);
