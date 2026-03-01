@@ -260,12 +260,17 @@ namespace WatneyAstrometry.Core.QuadDb
                         // V4: ratio section (N×6 bytes) followed by float section (N×12 bytes).
                         // Point directly into the mapped region — no copy, no syscall.
                         V4SubCellReads++;
+                        // Stride sampling: subset k visits quads at positions k, k+numSubSets, k+2*numSubSets, ...
+                        // Each subset spans the full R0 range rather than one contiguous block.
+                        int v4Count = subSetIndex < quadCount
+                            ? (quadCount - subSetIndex + numSubSets - 1) / numSubSets
+                            : 0;
                         int ratioByteCount = quadCount * 6;
                         byte* pRatioBuf = pBase + subCellsInRangeArr[sc].DataStartPos;
                         long floatSectionBase = subCellsInRangeArr[sc].DataStartPos + ratioByteCount;
 
                         ProcessSubCellMergeJoin(
-                            pRatioBuf, startIndex, nextStartIndex - startIndex, quadCount,
+                            pRatioBuf, subSetIndex, numSubSets, v4Count, quadCount,
                             sortedImageQuads, _bytesNeedReversing,
                             center, angularDistance,
                             pBase, floatSectionBase,
@@ -295,7 +300,8 @@ namespace WatneyAstrometry.Core.QuadDb
 
         private static unsafe void ProcessSubCellMergeJoin(
             byte* pBuf,            // ratio section only: totalQuads × 6 bytes, sorted by R0
-            int startIndex,
+            int firstIndex,        // index of the first element in this subset
+            int stride,            // step between subset elements (numSubSets for interleaved sampling)
             int count,
             int totalQuads,
             ImageStarQuad[] imageQuads,
@@ -308,14 +314,15 @@ namespace WatneyAstrometry.Core.QuadDb
             List<StarQuad> matchingQuadsWithinRange)
         {
             // pBuf contains the full ratio section (totalQuads × 6 bytes).
-            // Subset [startIndex, startIndex+count) sits at pBuf + startIndex*6.
-            byte* pRatios = pBuf + startIndex * 6;
-
+            // Subset elements are at indices firstIndex, firstIndex+stride, firstIndex+2*stride, ...
+            // Because the full array is sorted by R0 and the stride is uniform, the subset is also
+            // R0-sorted, so the merge join's imgJ pointer remains valid.
+            V4TotalDbQuadsScanned += count;
             int imgJ = 0; // lower-bound pointer into imageQuads; only ever advances
 
             for (int dbIdx = 0; dbIdx < count; dbIdx++)
             {
-                byte* pR = pRatios + dbIdx * 6;
+                byte* pR = pBuf + (long)(firstIndex + dbIdx * stride) * 6;
 
                 // Decode R0 for the window check only.
                 float r0 = (((pR[1] << 8) & 0x3FF) + (pR[0] & 0x3FF)) * OnePer1023;
@@ -352,7 +359,7 @@ namespace WatneyAstrometry.Core.QuadDb
 
                     // Full match — read the 12 float bytes directly from the mapped region.
                     V4FloatFetches++;
-                    byte* pF = pBase + floatSectionBase + (long)(startIndex + dbIdx) * 12;
+                    byte* pF = pBase + floatSectionBase + (long)(firstIndex + dbIdx * stride) * 12;
 
                     float ld, ra, dec;
                     if (bytesNeedReversing)
