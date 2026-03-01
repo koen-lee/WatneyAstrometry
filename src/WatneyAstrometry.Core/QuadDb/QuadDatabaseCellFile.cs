@@ -317,7 +317,6 @@ namespace WatneyAstrometry.Core.QuadDb
             // Subset elements are at indices firstIndex, firstIndex+stride, firstIndex+2*stride, ...
             // Because the full array is sorted by R0 and the stride is uniform, the subset is also
             // R0-sorted, so the merge join's imgJ pointer remains valid.
-            V4TotalDbQuadsScanned += count;
             int imgJ = 0; // lower-bound pointer into imageQuads; only ever advances
 
             for (int dbIdx = 0; dbIdx < count; dbIdx++)
