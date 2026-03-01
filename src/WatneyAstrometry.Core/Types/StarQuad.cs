@@ -27,7 +27,7 @@ namespace WatneyAstrometry.Core.Types
         /// <summary>
         /// The stars that make up this quad.
         /// </summary>
-        public virtual IReadOnlyList<IStar> Stars { get; protected set; } = new IStar[0];
+        public virtual IReadOnlyList<IStar> Stars { get; protected set; } = Array.Empty<IStar>();
 
         /// <summary>
         /// New quad from known ratios, largest distance, midpoint and stars.

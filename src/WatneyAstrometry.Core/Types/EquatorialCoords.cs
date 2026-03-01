@@ -15,36 +15,27 @@ namespace WatneyAstrometry.Core.Types
     /// <summary>
     /// RA, Dec coordinates.
     /// </summary>
-    public class EquatorialCoords
+    public readonly struct EquatorialCoords
     {
-        private double _dec;
-        private double _decRad;
-        private double _ra;
-        private double _raRad;
+        private readonly double _dec;
+        private readonly double _decRad;
+        private readonly double _ra;
+        private readonly double _raRad;
+        public static readonly EquatorialCoords Empty = new EquatorialCoords();
 
         /// <summary>
         /// RA coordinate, degrees decimal number.
         /// </summary>
         public double Ra
         {
-            get => _ra;
-            set
-            {
-                _ra = value;
-                _raRad = Conversions.Deg2Rad(_ra);
-            }
+            get => _ra; 
         }
         /// <summary>
         /// Dec coordinate, degrees decimal number.
         /// </summary>
         public double Dec
         {
-            get => _dec;
-            set
-            {
-                _dec = value;
-                _decRad = Conversions.Deg2Rad(_dec);
-            }
+            get => _dec; 
         }
 
         /// <summary>
@@ -52,7 +43,10 @@ namespace WatneyAstrometry.Core.Types
         /// </summary>
         public EquatorialCoords()
         {
-            
+            _ra = Double.NaN;
+            _dec = Double.NaN;
+            _raRad = Double.NaN;
+            _decRad = Double.NaN;
         }
 
         /// <summary>
@@ -62,8 +56,10 @@ namespace WatneyAstrometry.Core.Types
         /// <param name="dec"></param>
         public EquatorialCoords(double ra, double dec)
         {
-            Ra = ToPositive(ra);
-            Dec = dec;
+            _ra = ToPositive(ra);
+            _dec = dec;
+            _raRad = Conversions.Deg2Rad(_ra);
+            _decRad = Conversions.Deg2Rad(_dec);
         }
 
         /// <summary>

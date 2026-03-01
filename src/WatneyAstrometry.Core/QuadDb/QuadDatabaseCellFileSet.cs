@@ -23,9 +23,9 @@ namespace WatneyAstrometry.Core.QuadDb
             public int PassIndex { get; set; }
         }
 
-        private CellFilePassDensity[] _cellFilePassDensities = new CellFilePassDensity[0];
+        private CellFilePassDensity[] _cellFilePassDensities = Array.Empty<CellFilePassDensity>();
         
-        private QuadDatabaseCellFile[] _sourceFiles = new QuadDatabaseCellFile[0];
+        private QuadDatabaseCellFile[] _sourceFiles = Array.Empty<QuadDatabaseCellFile>();
         public IReadOnlyList<QuadDatabaseCellFile> SourceFiles => _sourceFiles;
         
 

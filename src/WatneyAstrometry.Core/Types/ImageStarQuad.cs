@@ -33,7 +33,7 @@ namespace WatneyAstrometry.Core.Types
         /// <param name="stars"></param>
         /// <exception cref="Exception"></exception>
         public ImageStarQuad(QuadRatios ratios, float largestDistance, IList<ImageStar> stars)
-            : base(ratios, largestDistance, null)
+            : base(ratios, largestDistance, EquatorialCoords.Empty)
         {
             if (stars.Count != 4)
                 throw new Exception("A quad has four stars");

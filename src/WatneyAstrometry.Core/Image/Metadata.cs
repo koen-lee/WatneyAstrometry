@@ -31,7 +31,7 @@ namespace WatneyAstrometry.Core.Image
         /// Return null if not available.
         /// </summary>
         /// <returns></returns>
-        public EquatorialCoords CenterPos { get; set; }
+        public EquatorialCoords? CenterPos { get; set; }
 
         /// <summary>
         /// The assumed field of view (width in degrees, height in degrees) if available. In FITS for example, it might be found in the headers.

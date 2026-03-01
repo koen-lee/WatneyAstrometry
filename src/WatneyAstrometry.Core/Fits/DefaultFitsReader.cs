@@ -187,7 +187,7 @@ namespace WatneyAstrometry.Core.Fits
                 return;
             }
 
-            fitsImage.Metadata.CenterPos = null;
+            fitsImage.Metadata.CenterPos = new EquatorialCoords(-1,-1);
         }
 
         private EquatorialCoords GetCoordsFromObjctRaDec(HduHeaderRecord ra, HduHeaderRecord dec)

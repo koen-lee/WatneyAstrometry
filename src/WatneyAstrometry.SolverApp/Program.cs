@@ -616,11 +616,13 @@ namespace WatneyAstrometry.SolverApp
 
             if (options.UseManualParams)
             {
+                var ra = double.NaN;
+                var dec = double.NaN;
                 if (options.Ra.Trim().Contains(' '))
                 {
                     try
                     {
-                        center.Ra = Conversions.RaToDecimal(options.Ra);
+                        ra = Conversions.RaToDecimal(options.Ra);
                     }
                     catch (Exception e)
                     {
@@ -629,8 +631,8 @@ namespace WatneyAstrometry.SolverApp
                 }
                 else
                 {
-                    if (double.TryParse(options.Ra, NumberStyles.Float, CultureInfo.InvariantCulture, out var ra))
-                        center.Ra = ra;
+                    if (double.TryParse(options.Ra, NumberStyles.Float, CultureInfo.InvariantCulture, out  ra))
+                    {}
                     else
                     {
                         parseErrors.Add("--ra: invalid number format.");
@@ -641,7 +643,7 @@ namespace WatneyAstrometry.SolverApp
                 {
                     try
                     {
-                        center.Dec = Conversions.DecToDecimal(options.Dec);
+                        dec = Conversions.DecToDecimal(options.Dec);
                     }
                     catch (Exception e)
                     {
@@ -650,8 +652,8 @@ namespace WatneyAstrometry.SolverApp
                 }
                 else
                 {
-                    if (double.TryParse(options.Dec, NumberStyles.Float, CultureInfo.InvariantCulture, out var dec))
-                        center.Dec = dec;
+                    if (double.TryParse(options.Dec, NumberStyles.Float, CultureInfo.InvariantCulture, out  dec))
+                    { }
                     else
                     {
                         parseErrors.Add("--dec: invalid number format.");
@@ -665,6 +667,7 @@ namespace WatneyAstrometry.SolverApp
                     ErrorAction(_parserResult, new Error[0], parseErrors);
                     Environment.Exit(1);
                 }
+                center = new EquatorialCoords(ra, dec);
 
                 var fieldRadiusMinMaxRegex = new Regex(@"^(\d+\.*\d*)-(\d+\.*\d*)$");
                 if (!string.IsNullOrEmpty(options.FieldRadiusMinMax) &&
@@ -718,7 +721,7 @@ namespace WatneyAstrometry.SolverApp
                         Environment.Exit(1);
                     }
 
-                    center = fitsImage.Metadata.CenterPos;
+                    center = fitsImage.Metadata.CenterPos.Value;
                     strategyOptions.MaxFieldRadiusDegrees = fitsImage.Metadata.ViewSize != null
                         ? (float)fitsImage.Metadata.ViewSize.DiameterDeg * 0.5f
                         : options.FieldRadius;

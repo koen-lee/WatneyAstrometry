@@ -19,7 +19,7 @@ namespace WatneyAstrometry.Core.QuadDb
     /// </summary>
     public class CompactQuadDatabase : IQuadDatabase, IDisposable
     {
-        internal QuadDatabaseCellFileSet[] _cellFileSets;
+        private QuadDatabaseCellFileSet[] _cellFileSets;
         private Dictionary<int, QuadDatabaseCellFileSet> _cellFileSetsById;
         private bool _disposing;
 
