@@ -14,7 +14,7 @@ namespace WatneyAstrometry.Core.Types
         public double DecTop { get; set; }
         public double DecBottom { get; set; }
 
-        private EquatorialCoords _center;
+        private EquatorialCoords? _center;
 
         public EquatorialCoords Center
         {
@@ -23,7 +23,7 @@ namespace WatneyAstrometry.Core.Types
                 if (_center == null)
                     _center = new EquatorialCoords(RaLeft + (RaRight - RaLeft) / 2,
                         DecBottom + (DecTop - DecBottom) / 2);
-                return _center;
+                return _center.Value;
             }
         }
 
