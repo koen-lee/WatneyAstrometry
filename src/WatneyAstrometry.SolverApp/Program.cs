@@ -707,7 +707,7 @@ namespace WatneyAstrometry.SolverApp
                     else
                         fitsImage = fitsReader.FromFile(options.ImageFilename);
 
-                    if(fitsImage.Metadata.CenterPos == null)
+                    if(fitsImage.Metadata.CenterPos.IsEmpty)
                         parseErrors.Add("FITS RA, DEC was not available in headers, manual coordinates required.");
                     if(fitsImage.Metadata.ViewSize == null && options.FieldRadius == 0)
                         parseErrors.Add("FITS camera view area was not available in headers, and --field-radius was not given.");
@@ -721,7 +721,7 @@ namespace WatneyAstrometry.SolverApp
                         Environment.Exit(1);
                     }
 
-                    center = fitsImage.Metadata.CenterPos.Value;
+                    center = fitsImage.Metadata.CenterPos;
                     strategyOptions.MaxFieldRadiusDegrees = fitsImage.Metadata.ViewSize != null
                         ? (float)fitsImage.Metadata.ViewSize.DiameterDeg * 0.5f
                         : options.FieldRadius;

@@ -21,6 +21,10 @@ namespace WatneyAstrometry.Core.Types
         private readonly double _decRad;
         private readonly double _ra;
         private readonly double _raRad;
+
+        /// <summary>
+        /// An empty coordinate, where RA and Dec are not available. This is the case for example when the FITS headers do not contain RA, Dec information.
+        /// </summary>
         public static readonly EquatorialCoords Empty = new EquatorialCoords();
 
         /// <summary>
@@ -28,15 +32,22 @@ namespace WatneyAstrometry.Core.Types
         /// </summary>
         public double Ra
         {
-            get => _ra; 
+            get => _ra;
         }
         /// <summary>
         /// Dec coordinate, degrees decimal number.
         /// </summary>
         public double Dec
         {
-            get => _dec; 
+            get => _dec;
         }
+
+        /// <summary>
+        /// True if the coordinates are empty, i.e. not available. This is the case for example when the FITS headers do not contain RA, Dec information.
+        /// If empty, Ra and Dec properties will return NaN.
+        /// Note that this is different from coordinates being at RA=0, Dec=0, which is a valid coordinate in the sky.
+        /// </summary>
+        public bool IsEmpty => double.IsNaN(_ra) || double.IsNaN(_dec);
 
         /// <summary>
         /// New empty equatorialcoords.
@@ -139,7 +150,7 @@ namespace WatneyAstrometry.Core.Types
                     Math.Cos(p1._raRad - p2._raRad);
             var angle = Math.Acos(a);
             return Conversions.Rad2Deg(angle);
-        }        
+        }
 
         /// <summary>
         /// Transforms the RA, Dec coords to standard coordinates around the given center.
@@ -150,7 +161,7 @@ namespace WatneyAstrometry.Core.Types
         {
             var centerRaRad = center._raRad;
             var centerDecRad = center._decRad;
-             
+
             var divider = (Math.Cos(centerDecRad) * Math.Cos(_decRad) * Math.Cos(_raRad - centerRaRad) +
                            Math.Sin(centerDecRad) * Math.Sin(_decRad));
 
@@ -290,7 +301,7 @@ namespace WatneyAstrometry.Core.Types
         /// <param name="binning">Camera binning</param>
         /// <param name="focalLenMm">Telescope focal length in mm</param>
         /// <returns>Pixel coordinate x, y</returns>
-        public static (double x, double y) ProjectToPlane(EquatorialCoords coordinate, EquatorialCoords planeCenter, double rotationDeg, int imageWidth, int imageHeight, 
+        public static (double x, double y) ProjectToPlane(EquatorialCoords coordinate, EquatorialCoords planeCenter, double rotationDeg, int imageWidth, int imageHeight,
             double pxSizeMicrons, int binning, double focalLenMm)
         {
             var imageWidthRad = 2 * Math.Atan((pxSizeMicrons * binning * imageWidth / 1000.0) / (2 * focalLenMm));
