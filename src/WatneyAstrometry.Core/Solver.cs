@@ -211,7 +211,7 @@ namespace WatneyAstrometry.Core
                 _logger.WriteInfo($"Image field radius: {0.5 * image.Metadata.ViewSize.DiameterDeg}");
 
             if(image.Metadata?.CenterPos != null)
-                _logger.WriteInfo($"Image center coordinate: {image.Metadata.CenterPos.Value.ToStringRounded(3)}");
+                _logger.WriteInfo($"Image center coordinate: {image.Metadata.CenterPos.ToStringRounded(3)}");
 
             OnSolveProgress?.Invoke(SolverStep.ImageReadFinished);
 

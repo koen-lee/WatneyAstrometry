@@ -2,21 +2,27 @@
     "mode": "nearby",
     "sampling": [1],
     "images": [
-        "./testimages/m31.jpg",
-        "./testimages/m81.png",
-        "./testimages/ic1795.fits",
-        "./testimages/m106.fits",
-        "./testimages/ngc7331.fits",
-        "./testimages/veil1.fits"
+        "./testimages/bm_1_heart-nebula.jpg",
+        "./testimages/bm_1_ic1795.fits",
+        "./testimages/bm_1_m31.fits",
+        "./testimages/bm_1_m33_green.fits",
+        "./testimages/bm_1_m81.png",
+        "./testimages/bm_1_ngc1491.fits",
+        "./testimages/bm_1_ngc383.fits",
+        "./testimages/bm_1_ngc7331.fits",
+        "./testimages/bm_1_ngc925.fits"
     ],
 	"imageParams": [
-		{ "ra": 9, "dec": 40, "field": "2.5-1", "steps": 1 },
-		{ "ra": 146, "dec": 68, "field": "1.0-0.5", "steps": 1 },
-		{ "ra": 35, "dec": 61, "field": "1.5-0.5", "steps": 1 },
-		{ "ra": 184, "dec": 45, "field": "2-0.5", "steps": 1 },
-		{ "ra": 337, "dec": 32, "field": "1.5-0.5", "steps": 1 },
-		{ "ra": 312, "dec": 30, "field": "2-1", "steps": 1 }
+		{ "ra": 38, "dec": 61, "field": "4-1", "steps": 1 },
+		{ "ra": 35, "dec": 63, "field": "2-0.5", "steps": 1 },
+		{ "ra": 11, "dec": 41, "field": "4-1", "steps": 1 },
+		{ "ra": 23, "dec": 31, "field": "3-0.5", "steps": 1 },
+		{ "ra": 149, "dec": 69, "field": "1.5-0.5", "steps": 1 },
+		{ "ra": 60, "dec": 51, "field": "1-0.25", "steps": 1 },
+		{ "ra": 17, "dec": 32, "field": "1.5-0.5", "steps": 1 },
+		{ "ra": 339, "dec": 34, "field": "2-0.5", "steps": 1 },
+		{ "ra": 37, "dec": 34, "field": "2-0.5", "steps": 1 }
 	],
     "output": "./nearby.csv"
-    
+
 }

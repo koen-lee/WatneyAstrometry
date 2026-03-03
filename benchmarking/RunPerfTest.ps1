@@ -19,7 +19,7 @@ $defaultArgs = @(
 );
 
 $cJson = Get-Content -Raw -Encoding ascii $Config;
-$c = ConvertFrom-Json -Depth 10 -InputObject $cJson;
+$c = ConvertFrom-Json -InputObject $cJson;
 
 $tableFields = @("Image", "Width px", "Height px", "Success", 
     "Stars detected", "Stars used", "Sampling", "Image read (s)", 

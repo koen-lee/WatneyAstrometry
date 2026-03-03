@@ -37,6 +37,7 @@ namespace WatneyAstrometry.Core.Types
         {
             get => _dec; 
         }
+        public bool IsEmpty => double.IsNaN(_ra) || double.IsNaN(_dec);
 
         /// <summary>
         /// New empty equatorialcoords.

@@ -2,13 +2,16 @@
     "mode": "blind",
     "sampling": [16, 8, 4, 2, 1],
     "images": [
-        "./testimages/m31.jpg",
-        "./testimages/m81.png",
-        "./testimages/ic1795.fits",
-        "./testimages/m106.fits",
-        "./testimages/ngc7331.fits",
-        "./testimages/veil1.fits"
+        "./testimages/bm_1_heart-nebula.jpg",
+        "./testimages/bm_1_ic1795.fits",
+        "./testimages/bm_1_m31.fits",
+        "./testimages/bm_1_m33_green.fits",
+        "./testimages/bm_1_m81.png",
+        "./testimages/bm_1_ngc1491.fits",
+        "./testimages/bm_1_ngc383.fits",
+        "./testimages/bm_1_ngc7331.fits",
+        "./testimages/bm_1_ngc925.fits"
     ],
     "output": "./blind.csv"
-    
+
 }
