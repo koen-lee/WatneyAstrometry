@@ -45,6 +45,30 @@ Set-Content -Encoding ascii -Path $OutFile $headerRow;
 
 Write-Host "Starting..."
 
+# Warmup run: solve the first image/sampling once to warm OS file caches,
+# then discard the result before the measured runs begin.
+$warmupSampling = $c.sampling[0];
+$warmupImage = $c.images[0];
+Write-Host "Warmup run (sampling=$warmupSampling, image=$warmupImage)..."
+$warmupArgs = @(
+    $c.mode,
+    "--sampling", $warmupSampling,
+    "-i", $warmupImage
+);
+if($c.mode -eq "blind") {
+    $warmupArgs += @("--min-radius", "0.5", "--max-radius", "8");
+}
+else {
+    $warmupArgs += @("--search-radius", "10", "-m");
+    $warmupArgs += @("--ra", $c.imageParams[0].ra);
+    $warmupArgs += @("--dec", $c.imageParams[0].dec);
+    $warmupArgs += @("--field-radius-range", $c.imageParams[0].field);
+    $warmupArgs += @("--field-radius-steps", $c.imageParams[0].steps);
+}
+$warmupArgs += $defaultArgs;
+& $SolverExe @warmupArgs | Out-Null;
+Write-Host "Warmup done."
+
 for($s = 0; $s -lt $c.sampling.Length; $s++) {
     $sampling = $c.sampling[$s];
     Write-Host "Sampling $sampling";
