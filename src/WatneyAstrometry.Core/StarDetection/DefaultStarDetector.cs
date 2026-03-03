@@ -309,10 +309,10 @@ namespace WatneyAstrometry.Core.StarDetection
                     merged = true;
                     var mergeTarget = connectedPreviousLinePixelBins[0];
                     var sourceRow = starBin.PixelRows[y];
-                    if (!mergeTarget.PixelRows.TryGetValue(y, out var existing))
+                    if (!mergeTarget.PixelRows.TryGetValue(y, out var existingy))
                         mergeTarget.PixelRows[y] = new List<StarPixel>(sourceRow);
                     else
-                        existing.AddRange(sourceRow);
+                        existingy.AddRange(sourceRow);
 
                     rowOutputBins.Add(mergeTarget);
 
@@ -322,10 +322,10 @@ namespace WatneyAstrometry.Core.StarDetection
                         foreach (var pixelRow in mergeable.PixelRows)
                         {
                             var k = pixelRow.Key;
-                            if (!mergeTarget.PixelRows.TryGetValue(k, out var existing))
+                            if (!mergeTarget.PixelRows.TryGetValue(k, out var existingk))
                                 mergeTarget.PixelRows[k] = new List<StarPixel>(pixelRow.Value);
                             else
-                                existing.AddRange(pixelRow.Value);
+                                existingk.AddRange(pixelRow.Value);
                         }
 
                         _starBins.Remove(mergeable); // Remove, since this is now merged with another one.
