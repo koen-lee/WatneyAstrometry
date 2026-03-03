@@ -14,13 +14,13 @@
     ],
 	"imageParams": [
 		{ "ra": 38, "dec": 61, "field": "4-1", "steps": 1 },
-		{ "ra": 35, "dec": 63, "field": "2-0.5", "steps": 1 },
-		{ "ra": 11, "dec": 41, "field": "4-1", "steps": 1 },
+		{ "ra": 35, "dec": 61, "field": "2-0.5", "steps": 1 },
+		{ "ra": 9, "dec": 40, "field": "4-1", "steps": 1 },
 		{ "ra": 23, "dec": 31, "field": "3-0.5", "steps": 1 },
-		{ "ra": 149, "dec": 69, "field": "1.5-0.5", "steps": 1 },
+		{ "ra": 146, "dec": 68, "field": "1.5-0.5", "steps": 1 },
 		{ "ra": 60, "dec": 51, "field": "1-0.25", "steps": 1 },
 		{ "ra": 17, "dec": 32, "field": "1.5-0.5", "steps": 1 },
-		{ "ra": 339, "dec": 34, "field": "2-0.5", "steps": 1 },
+		{ "ra": 337, "dec": 32, "field": "2-0.5", "steps": 1 },
 		{ "ra": 37, "dec": 34, "field": "2-0.5", "steps": 1 }
 	],
     "output": "./nearby.csv"
