@@ -7,7 +7,19 @@ param(
 
     [Parameter(Mandatory=$true)]
     [string]
-    $SolverExe
+    $SolverExe,
+
+    [Parameter(Mandatory=$true)]
+    [string]
+    $SolverConfig,
+
+    [Parameter(Mandatory=$true)]
+    [string]
+    $OutFile,
+
+    [Parameter(Mandatory=$false)]
+    [int]
+    $LimitThreads = 4
 )
 
 $ErrorActionPreference = "Stop"
@@ -15,7 +27,9 @@ $ErrorActionPreference = "Stop"
 $defaultArgs = @(    
     "--benchmark",
     "--extended",
-	"--max-stars", "300"
+	"--max-stars", "300",
+	"--limit-threads", "$LimitThreads",
+	"--use-config", $SolverConfig
 );
 
 $cJson = Get-Content -Raw -Encoding ascii $Config;
@@ -27,7 +41,7 @@ $tableFields = @("Image", "Width px", "Height px", "Success",
     "Field radius");
 
 $headerRow = [string]::Join(";", $tableFields);
-Set-Content -Encoding ascii -Path $c.output $headerRow;
+Set-Content -Encoding ascii -Path $OutFile $headerRow;
 
 Write-Host "Starting..."
 
@@ -83,7 +97,7 @@ for($s = 0; $s -lt $c.sampling.Length; $s++) {
 
 
         $rowString = [string]::Join(";", $row);
-        Add-Content -Encoding ascii -Path $c.output $rowString;
+        Add-Content -Encoding ascii -Path $OutFile $rowString;
     }
 }
 
