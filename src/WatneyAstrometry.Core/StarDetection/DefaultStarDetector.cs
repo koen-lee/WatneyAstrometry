@@ -103,7 +103,7 @@ namespace WatneyAstrometry.Core.StarDetection
             //long flatValue = pixelAvg + (long)(stdDev * 3);
             long flatValue = pixelAvg + (long)(stdDev * _starDetectionBgOffset);
 
-            List<StarPixelBin> previousLineBins = new List<StarPixelBin>();
+            HashSet<StarPixelBin> previousLineBins = new HashSet<StarPixelBin>();
             for (var y = 0; y < _imageMetadata.ImageHeight; y++)
             {
                 _imageDataStream.ReadExactly(buf, 0, buf.Length);
@@ -194,7 +194,7 @@ namespace WatneyAstrometry.Core.StarDetection
         // Algorithm: read whole line into star pixel bins (contiguous pixels over background value on X axis).
         // Then look up one row (x-1 and x+1) for previous line bins. Combine the current bin to that/them
         // (check from left to right, combine self with topleftmost, and potentially the topright with topleftmost too)
-        private unsafe List<StarPixelBin> BinStarPixelsFromScanline(byte[] bytes, int y, long flatValue, List<StarPixelBin> previousLineBins)
+        private unsafe HashSet<StarPixelBin> BinStarPixelsFromScanline(byte[] bytes, int y, long flatValue, HashSet<StarPixelBin> previousLineBins)
         {
             StarPixelBin currentBin = null;
             List<StarPixelBin> scanLineBins = new List<StarPixelBin>();
@@ -270,7 +270,7 @@ namespace WatneyAstrometry.Core.StarDetection
             if (previousLineBins.Count == 0)
             {
                 _starBins.AddRange(scanLineBins);
-                return scanLineBins;
+                return new HashSet<StarPixelBin>(scanLineBins);
             }
 
             // Merge into previous line's star pixel bins if they happen to be adjacent.
@@ -280,7 +280,7 @@ namespace WatneyAstrometry.Core.StarDetection
             // Add our pixels to that one
             // Add the others' pixels to that one
 
-            List<StarPixelBin> rowOutputBins = new List<StarPixelBin>();
+            HashSet<StarPixelBin> rowOutputBins = new HashSet<StarPixelBin>();
 
             for (var i = 0; i < scanLineBins.Count; i++)
             {
@@ -291,9 +291,8 @@ namespace WatneyAstrometry.Core.StarDetection
 
                 List<StarPixelBin> connectedPreviousLinePixelBins = new List<StarPixelBin>();
 
-                for (var j = 0; j < previousLineBins.Count; j++)
+                foreach (var prevLineBin in previousLineBins)
                 {
-                    var prevLineBin = previousLineBins[j];
                     var prevLineBinPixels = prevLineBin.PixelRows[y - 1];
                     for (var p = 0; p < prevLineBinPixels.Count; p++)
                     {
@@ -309,13 +308,13 @@ namespace WatneyAstrometry.Core.StarDetection
                 {
                     merged = true;
                     var mergeTarget = connectedPreviousLinePixelBins[0];
-                    if (!mergeTarget.PixelRows.ContainsKey(y))
-                        mergeTarget.PixelRows[y] = new List<StarPixel>(starBin.PixelRows[y]);
+                    var sourceRow = starBin.PixelRows[y];
+                    if (!mergeTarget.PixelRows.TryGetValue(y, out var existing))
+                        mergeTarget.PixelRows[y] = new List<StarPixel>(sourceRow);
                     else
-                        mergeTarget.PixelRows[y].AddRange(starBin.PixelRows[y]);
+                        existing.AddRange(sourceRow);
 
-                    if (!rowOutputBins.Contains(mergeTarget))
-                        rowOutputBins.Add(mergeTarget);
+                    rowOutputBins.Add(mergeTarget);
 
                     for (var n = 1; n < connectedPreviousLinePixelBins.Count; n++)
                     {
@@ -323,10 +322,10 @@ namespace WatneyAstrometry.Core.StarDetection
                         foreach (var pixelRow in mergeable.PixelRows)
                         {
                             var k = pixelRow.Key;
-                            if (!mergeTarget.PixelRows.ContainsKey(k))
+                            if (!mergeTarget.PixelRows.TryGetValue(k, out var existing))
                                 mergeTarget.PixelRows[k] = new List<StarPixel>(pixelRow.Value);
                             else
-                                mergeTarget.PixelRows[k].AddRange(pixelRow.Value);
+                                existing.AddRange(pixelRow.Value);
                         }
 
                         _starBins.Remove(mergeable); // Remove, since this is now merged with another one.
