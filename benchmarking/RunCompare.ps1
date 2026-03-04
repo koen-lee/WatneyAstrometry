@@ -6,6 +6,7 @@ $variants = @(
     @{ Name = "net10_qdb3"; Exe = "net10.0\watney-solve.exe"; Config = "net10.0\watney-solve-config3.yml" },
     @{ Name = "net10_qdb4"; Exe = "net10.0\watney-solve.exe"; Config = "net10.0\watney-solve-config4.yml" }
 )
+$timestamp = Get-Date -Format "yyyy-MM-dd_HH-mm-ss"
 
 foreach ($threads in $threadCounts) {
     foreach ($mode in $modes) {
@@ -15,7 +16,7 @@ foreach ($threads in $threadCounts) {
             .\RunPerfTest.ps1 -Config ".\${mode}-config.json" `
                 -SolverExe "$solverBase\$($v.Exe)" `
                 -SolverConfig "$solverBase\$($v.Config)" `
-                -OutFile $outFile `
+                -OutFile "${timestamp}\${outFile}" `
                 -LimitThreads $threads
         }
     }
