@@ -39,6 +39,7 @@ namespace WatneyAstrometry.Core.StarDetection
         private double _starDetectionBgOffset;
 
         private List<StarPixelBin> _starBins = new List<StarPixelBin>();
+        private readonly HashSet<StarPixelBin> _absorbedBins = [];
         internal IReadOnlyList<StarPixelBin> StarBins => _starBins;
 
         /// <summary>
@@ -103,12 +104,15 @@ namespace WatneyAstrometry.Core.StarDetection
             //long flatValue = pixelAvg + (long)(stdDev * 3);
             long flatValue = pixelAvg + (long)(stdDev * _starDetectionBgOffset);
 
-            HashSet<StarPixelBin> previousLineBins = new HashSet<StarPixelBin>();
-            for (var y = 0; y < _imageMetadata.ImageHeight; y++)
+            switch (_imageMetadata.BitsPerPixel)
             {
-                _imageDataStream.ReadExactly(buf, 0, buf.Length);
-                previousLineBins = BinStarPixelsFromScanline(buf, y, flatValue, previousLineBins);
+                case 8:  RunScanLoop<PixelReader8>(buf, flatValue);  break;
+                case 16: RunScanLoop<PixelReader16>(buf, flatValue); break;
+                case 32: RunScanLoop<PixelReader32>(buf, flatValue); break;
             }
+
+            if (_absorbedBins.Count > 0)
+                _starBins.RemoveAll(_absorbedBins.Contains);
 
             for (var i = 0; i < _starBins.Count; i++)
                 _starBins[i].RecalcLeftRightTopBottom();
@@ -130,138 +134,84 @@ namespace WatneyAstrometry.Core.StarDetection
         {
             _histogram = new Dictionary<long, long>();
             _imageDataStream.Seek(_streamDataPos, SeekOrigin.Begin);
-
-            byte[] buf = new byte[_imageMetadata.ImageWidth * _imageMetadata.BitsPerPixel / 8];
-
-            for (var y = 0; y < _imageMetadata.ImageHeight; y++)
+            byte[] buf = new byte[_imageMetadata.ImageWidth * _bytesPerPixel];
+            switch (_imageMetadata.BitsPerPixel)
             {
-                _imageDataStream.ReadExactly(buf, 0, buf.Length);
-                AddScanlineToHistogram(buf);
+                case 8:  FillHistogram<PixelReader8>(buf);  break;
+                case 16: FillHistogram<PixelReader16>(buf); break;
+                case 32: FillHistogram<PixelReader32>(buf); break;
             }
         }
 
-
-        private unsafe void AddScanlineToHistogram(byte[] bytes)
+        private void FillHistogram<TReader>(byte[] buf) where TReader : struct, IPixelReader
         {
-            var byteIncrement = _imageMetadata.BitsPerPixel / 8;
-            var byteWidth = _imageMetadata.ImageWidth * _imageMetadata.BitsPerPixel / 8;
+            for (var y = 0; y < _imageMetadata.ImageHeight; y++)
+            {
+                _imageDataStream.ReadExactly(buf, 0, buf.Length);
+                AddScanlineToHistogram<TReader>(buf);
+            }
+        }
 
+        private unsafe void AddScanlineToHistogram<TReader>(byte[] bytes) where TReader : struct, IPixelReader
+        {
+            var reader = default(TReader);
             fixed (byte* pBuffer = bytes)
             {
-                for (int pos = 0; pos < byteWidth; pos += byteIncrement)
+                for (int pos = 0; pos < bytes.Length; pos += _bytesPerPixel)
                 {
-                    long count = 0;
-                    if (_imageMetadata.BitsPerPixel == 8)
+                    long pixelVal = reader.Read(pBuffer, pos);
+                    _histogram.TryGetValue(pixelVal, out long count);
+                    _histogram[pixelVal] = ++count;
+                    if (count > _histogramPeakCount)
                     {
-                        _histogram.TryGetValue(pBuffer[pos], out count);
-                        _histogram[pBuffer[pos]] = ++count;
-                        if (count > _histogramPeakCount)
-                        {
-                            _histogramPeakCount = count;
-                            _histogramPeakValue = pBuffer[pos];
-                        }
-                    }
-                    else if (_imageMetadata.BitsPerPixel == 16)
-                    {
-                        short val = (short)(pBuffer[pos] << 8 | pBuffer[pos + 1]);
-                        ushort uval = (ushort)(val - short.MinValue);
-                        _histogram.TryGetValue(uval, out count);
-                        _histogram[uval] = ++count;
-                        if (count > _histogramPeakCount)
-                        {
-                            _histogramPeakCount = count;
-                            _histogramPeakValue = uval;
-                        }
-                    }
-                    else if (_imageMetadata.BitsPerPixel == 32)
-                    {
-                        int val = (int)(pBuffer[pos] << 24 | pBuffer[pos + 1] << 16 | pBuffer[pos + 2] << 8 |
-                                           pBuffer[pos + 3]);
-                        uint uval = (ushort)(val - int.MinValue);
-                        _histogram.TryGetValue(uval, out count);
-                        _histogram[uval] = ++count;
-                        if (count > _histogramPeakCount)
-                        {
-                            _histogramPeakCount = count;
-                            _histogramPeakValue = uval;
-                        }
+                        _histogramPeakCount = count;
+                        _histogramPeakValue = pixelVal;
                     }
                 }
             }
         }
 
 
+        private void RunScanLoop<TReader>(byte[] buf, long flatValue) where TReader : struct, IPixelReader
+        {
+            _absorbedBins.Clear();
+            HashSet<StarPixelBin> previousLineBins = [];
+            for (var y = 0; y < _imageMetadata.ImageHeight; y++)
+            {
+                _imageDataStream.ReadExactly(buf, 0, buf.Length);
+                previousLineBins = BinStarPixelsFromScanline<TReader>(buf, y, flatValue, previousLineBins);
+            }
+        }
+
         // Algorithm: read whole line into star pixel bins (contiguous pixels over background value on X axis).
         // Then look up one row (x-1 and x+1) for previous line bins. Combine the current bin to that/them
         // (check from left to right, combine self with topleftmost, and potentially the topright with topleftmost too)
-        private unsafe HashSet<StarPixelBin> BinStarPixelsFromScanline(byte[] bytes, int y, long flatValue, HashSet<StarPixelBin> previousLineBins)
+        private unsafe HashSet<StarPixelBin> BinStarPixelsFromScanline<TReader>(byte[] bytes, int y, long flatValue, HashSet<StarPixelBin> previousLineBins) where TReader : struct, IPixelReader
         {
+            var reader = default(TReader);
             StarPixelBin currentBin = null;
             List<StarPixelBin> scanLineBins = new List<StarPixelBin>();
 
             // Collect the current pixel line into contiguous star pixel bins.
             fixed (byte* pBuffer = bytes)
             {
-                var byteIncrement = _bytesPerPixel;
                 var scanlineByteLen = _imageMetadata.ImageWidth * _bytesPerPixel;
-                for (int pos = 0, x = 0; pos < scanlineByteLen; pos += byteIncrement, x++)
+                for (int pos = 0, x = 0; pos < scanlineByteLen; pos += _bytesPerPixel, x++)
                 {
-                    if (_imageMetadata.BitsPerPixel == 8)
+                    long val = reader.Read(pBuffer, pos);
+                    if (val > flatValue)
                     {
-                        byte val = pBuffer[pos];
-                        if (val > flatValue)
+                        if (currentBin == null)
                         {
-                            if (currentBin == null)
-                            {
-                                currentBin = new StarPixelBin(x, y, val);
-                                scanLineBins.Add(currentBin);
-                            }
-                            else
-                                currentBin.Add(x, y, pBuffer[pos]);
+                            currentBin = new StarPixelBin(x, y, val);
+                            scanLineBins.Add(currentBin);
                         }
                         else
-                        {
-                            currentBin = null;
-                        }
+                            currentBin.Add(x, y, val);
                     }
-                    else if (_imageMetadata.BitsPerPixel == 16)
+                    else
                     {
-                        short val = (short)(pBuffer[pos] << 8 | pBuffer[pos + 1]);
-                        ushort uval = (ushort)(val - short.MinValue);
-                        if (uval > flatValue)
-                        {
-                            if (currentBin == null)
-                            {
-                                currentBin = new StarPixelBin(x, y, uval);
-                                scanLineBins.Add(currentBin);
-                            }
-                            else
-                                currentBin.Add(x, y, uval);
-                        }
-                        else
-                        {
-                            currentBin = null;
-                        }
-                    }
-                    else if (_imageMetadata.BitsPerPixel == 32)
-                    {
-                        int val = (int)(pBuffer[pos] << 24 | pBuffer[pos + 1] << 16 | pBuffer[pos + 2] << 8 |
-                                          pBuffer[pos + 3]);
-                        uint uval = (uint)(val - int.MinValue);
-                        if (uval > flatValue)
-                        {
-                            if (currentBin == null)
-                            {
-                                currentBin = new StarPixelBin(x, y, uval);
-                                scanLineBins.Add(currentBin);
-                            }
-                            else
-                                currentBin.Add(x, y, uval);
-                        }
-                        else
-                        {
-                            currentBin = null;
-                        }
+                        currentBin = null;
                     }
                 }
             }
@@ -328,7 +278,7 @@ namespace WatneyAstrometry.Core.StarDetection
                                 existingk.AddRange(pixelRow.Value);
                         }
 
-                        _starBins.Remove(mergeable); // Remove, since this is now merged with another one.
+                        _absorbedBins.Add(mergeable); // Mark absorbed; removed from _starBins after all scanlines.
                         previousLineBins.Remove(mergeable);
                     }
                 }
