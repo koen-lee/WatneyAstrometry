@@ -1,4 +1,4 @@
-﻿// Copyright (c) Jussi Saarivirta.
+// Copyright (c) Jussi Saarivirta.
 // Licensed under the Apache License, Version 2.0.
 
 using System;
@@ -31,10 +31,7 @@ namespace WatneyAstrometry.Core.StarDetection
         private Stream _imageDataStream;
         private Metadata _imageMetadata;
         private long _streamDataPos;
-
-        private Dictionary<long, long> _histogram;
-        private long _histogramPeakValue = 0;
-        private long _histogramPeakCount = 0;
+        private uint[] _histogram;
         private int _bytesPerPixel;
         private double _starDetectionBgOffset;
 
@@ -46,7 +43,7 @@ namespace WatneyAstrometry.Core.StarDetection
         /// Filter implementation, which filters out undesirable pixel bins.
         /// </summary>
         public IStarDetectionFilter DetectionFilter { get; set; } = new DefaultStarDetectionFilter();
-        
+
         /// <summary>
         /// New instance of star detector.
         /// </summary>
@@ -59,8 +56,8 @@ namespace WatneyAstrometry.Core.StarDetection
 
         private void ValidateInputArgs()
         {
-            var supportedBpp = new[] {8, 16, 32};
-            if(!supportedBpp.Contains(_imageMetadata.BitsPerPixel))
+            var supportedBpp = new[] { 8, 16, 32 };
+            if (!supportedBpp.Contains(_imageMetadata.BitsPerPixel))
                 throw new NotSupportedException($"Unsupported BPP value '{_imageMetadata.BitsPerPixel}'. Supported BPP values are: {string.Join(", ", supportedBpp)}");
         }
 
@@ -83,22 +80,26 @@ namespace WatneyAstrometry.Core.StarDetection
             Initialize(image);
 
             _imageDataStream.Seek(_streamDataPos, SeekOrigin.Begin);
-            if(_histogram == null || !_histogram.Any())
+            if (_histogram == null)
                 CreateHistogram();
 
             _imageDataStream.Seek(_streamDataPos, SeekOrigin.Begin);
             byte[] buf = new byte[_imageMetadata.ImageWidth * _bytesPerPixel];
 
-
             var pixelCount = _imageMetadata.ImageWidth * _imageMetadata.ImageHeight;
-            var pixelSum = _histogram.Sum(x => x.Key * x.Value);
+            long pixelSum = 0L;
+            for (int i = 0; i < _histogram.Length; i++)
+                pixelSum += i * _histogram[i];
             var pixelAvg = pixelSum / pixelCount;
 
             // Too dark or broken image.
             if (pixelAvg == 0)
                 return new List<ImageStar>();
 
-            double diffSquared = _histogram.Sum(x => (x.Key - pixelAvg) * (x.Key - pixelAvg) * x.Value);
+            double diffSquared = 0;
+            for (int i = 0; i < _histogram.Length; i++)
+                diffSquared += (i - pixelAvg) * (i - pixelAvg) * _histogram[i];
+
             double stdDev = Math.Sqrt(diffSquared / pixelCount);
 
             //long flatValue = pixelAvg + (long)(stdDev * 3);
@@ -106,9 +107,15 @@ namespace WatneyAstrometry.Core.StarDetection
 
             switch (_imageMetadata.BitsPerPixel)
             {
-                case 8:  RunScanLoop<PixelReader8>(buf, flatValue);  break;
-                case 16: RunScanLoop<PixelReader16>(buf, flatValue); break;
-                case 32: RunScanLoop<PixelReader32>(buf, flatValue); break;
+                case 8:
+                    RunScanLoop<PixelReader8>(buf, flatValue);
+                    break;
+                case 16:
+                    RunScanLoop<PixelReader16>(buf, flatValue);
+                    break;
+                case 32:
+                    RunScanLoop<PixelReader32>(buf, flatValue);
+                    break;
             }
 
             if (_absorbedBins.Count > 0)
@@ -124,22 +131,35 @@ namespace WatneyAstrometry.Core.StarDetection
                 var starProps = x.GetCenterPixelPosAndRelativeBrightness();
                 return new ImageStar(starProps.PixelPosX, starProps.PixelPosY, starProps.BrightnessValue, starProps.starSize);
             }).ToList();
-            
+
             return detectedStars;
-
-
         }
 
         private void CreateHistogram()
         {
-            _histogram = new Dictionary<long, long>();
+            if (((long)_imageMetadata.ImageHeight) * _imageMetadata.ImageWidth > uint.MaxValue)
+            {
+                // If images get this large, we need to use a different approach for histogram 
+                // (e.g. split into tiles or downsample or do detection on a square in the middle),
+                // but this is good enough for now.
+                // We support images up to ~65k x 65k (4 gigapixels, uint.MaxValue), which is already quite large for astronomical purposes.
+                throw new NotSupportedException("Image is too large to process.");
+            }
+
+            _histogram = new uint[ushort.MaxValue + 1];
             _imageDataStream.Seek(_streamDataPos, SeekOrigin.Begin);
             byte[] buf = new byte[_imageMetadata.ImageWidth * _bytesPerPixel];
             switch (_imageMetadata.BitsPerPixel)
             {
-                case 8:  FillHistogram<PixelReader8>(buf);  break;
-                case 16: FillHistogram<PixelReader16>(buf); break;
-                case 32: FillHistogram<PixelReader32>(buf); break;
+                case 8:
+                    FillHistogram<PixelReader8>(buf);
+                    break;
+                case 16:
+                    FillHistogram<PixelReader16>(buf);
+                    break;
+                case 32:
+                    FillHistogram<PixelReader32>(buf);
+                    break;
             }
         }
 
@@ -159,18 +179,11 @@ namespace WatneyAstrometry.Core.StarDetection
             {
                 for (int pos = 0; pos < bytes.Length; pos += _bytesPerPixel)
                 {
-                    long pixelVal = reader.Read(pBuffer, pos);
-                    _histogram.TryGetValue(pixelVal, out long count);
-                    _histogram[pixelVal] = ++count;
-                    if (count > _histogramPeakCount)
-                    {
-                        _histogramPeakCount = count;
-                        _histogramPeakValue = pixelVal;
-                    }
+                    var pixelVal = reader.Read(pBuffer, pos);
+                    _histogram[pixelVal]++;
                 }
             }
         }
-
 
         private void RunScanLoop<TReader>(byte[] buf, long flatValue) where TReader : struct, IPixelReader
         {
