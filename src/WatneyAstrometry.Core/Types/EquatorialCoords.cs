@@ -1,4 +1,4 @@
-﻿// Copyright (c) Jussi Saarivirta.
+// Copyright (c) Jussi Saarivirta.
 // Licensed under the Apache License, Version 2.0.
 
 using System;
@@ -21,6 +21,9 @@ namespace WatneyAstrometry.Core.Types
         private readonly double _decRad;
         private readonly double _ra;
         private readonly double _raRad;
+        /// <summary>
+        /// Uninitialized coordinates (NaN).
+        /// </summary>
         public static readonly EquatorialCoords Empty = new EquatorialCoords();
 
         /// <summary>
@@ -37,6 +40,10 @@ namespace WatneyAstrometry.Core.Types
         {
             get => _dec; 
         }
+
+        /// <summary>
+        /// Returns whether a part is uninitialized (NaN).
+        /// </summary>
         public bool IsEmpty => double.IsNaN(_ra) || double.IsNaN(_dec);
 
         /// <summary>

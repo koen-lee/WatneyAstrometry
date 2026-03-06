@@ -1,4 +1,4 @@
-﻿// Copyright (c) Jussi Saarivirta.
+// Copyright (c) Jussi Saarivirta.
 // Licensed under the Apache License, Version 2.0.
 
 using System;
@@ -449,7 +449,6 @@ namespace WatneyAstrometry.Core
                                 
                                 _logger.WriteInfo(
                                     $"Starting search tasks in parallel. Running sampling subset {currentSubSetIndex + 1}/{numSubSets}");
-
                                 
                                 var successTcs = new TaskCompletionSource<SolveResult>(TaskCreationOptions.RunContinuationsAsynchronously);
                                 var searchTasks = searchQueue.Select(searchRun => WatneyTaskFactory.Instance.StartNew(() =>
