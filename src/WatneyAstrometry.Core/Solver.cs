@@ -394,6 +394,17 @@ namespace WatneyAstrometry.Core
             var radiusGroupCount = runsByRadius.Count;
 
 
+            void AddRunPropertiesTo(SolveResult r)
+            {
+                result = r;
+                diagnosticsData.MatchInstances = r.DiagnosticsData?.MatchInstances;
+                result.StarsDetected = stars.Count;
+                result.StarsUsedInSolve = chosenDetectedStars.Count;
+                result.DiagnosticsData = diagnosticsData;
+                result.TimeSpent = stopwatch.Elapsed;
+                result.AreasSearched = _iterations;
+            }
+
             if (strategy.UseParallelism)
             {
                 
@@ -512,13 +523,7 @@ namespace WatneyAstrometry.Core
                 {
                     stopwatch.Stop();
                     _logger.WriteInfo($"Search tasks finished. Time spent: {stopwatch.Elapsed}");
-                    result = successfulSolveResult ?? new SolveResult();
-                    diagnosticsData.MatchInstances = result.DiagnosticsData?.MatchInstances;
-                    result.StarsDetected = stars.Count;
-                    result.StarsUsedInSolve = chosenDetectedStars.Count;
-                    result.DiagnosticsData = diagnosticsData;
-                    result.TimeSpent = stopwatch.Elapsed;
-                    result.AreasSearched = _iterations;
+                    AddRunPropertiesTo(successfulSolveResult ?? new SolveResult());
                     if (cancellationToken.IsCancellationRequested)
                         result.Canceled = true;
                 }
@@ -530,18 +535,6 @@ namespace WatneyAstrometry.Core
                 _logger.WriteInfo($"Starting search tasks in serial mode");
                 var serialSearches = new List<SolveResult>();
 
-                // For convenience.
-                void MakeSuccessResult(SolveResult r)
-                {
-                    result = r;
-                    diagnosticsData.MatchInstances = r.DiagnosticsData.MatchInstances;
-                    result.StarsDetected = stars.Count;
-                    result.StarsUsedInSolve = chosenDetectedStars.Count;
-                    result.DiagnosticsData = diagnosticsData;
-                    result.TimeSpent = stopwatch.Elapsed;
-                    result.AreasSearched = _iterations;
-                }
-                
 
                 for (currentSubSetIndex = 0; currentSubSetIndex < numSubSets; currentSubSetIndex++)
                 {
@@ -586,7 +579,7 @@ namespace WatneyAstrometry.Core
                                 {
                                     stopwatch.Stop();
                                     _logger.WriteInfo($"Search tasks finished. Time spent: {stopwatch.Elapsed}");
-                                    MakeSuccessResult(taskResult);
+                                    AddRunPropertiesTo(taskResult);
 
                                     continueSearching = false;
                                     break;
@@ -623,7 +616,7 @@ namespace WatneyAstrometry.Core
                                 {
                                     stopwatch.Stop();
                                     _logger.WriteInfo($"Search tasks finished. Time spent: {stopwatch.Elapsed}");
-                                    MakeSuccessResult(taskResult);
+                                    AddRunPropertiesTo(taskResult);
                                     
                                     break;
                                 }
@@ -660,12 +653,7 @@ namespace WatneyAstrometry.Core
                 {
                     stopwatch.Stop();
                     _logger.WriteInfo($"Search tasks finished. Time spent: {stopwatch.Elapsed}");
-                    result = new SolveResult();
-                    result.StarsDetected = stars.Count;
-                    result.StarsUsedInSolve = chosenDetectedStars.Count;
-                    result.DiagnosticsData = diagnosticsData;
-                    result.AreasSearched = _iterations;
-                    result.TimeSpent = stopwatch.Elapsed;
+                    AddRunPropertiesTo(new SolveResult());
                     if (cancellationToken.IsCancellationRequested)
                         result.Canceled = true;
                 }
