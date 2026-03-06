@@ -355,8 +355,7 @@ namespace WatneyAstrometry.Core
 
             OnSolveProgress?.Invoke(SolverStep.QuadFormationFinished);
 
-            var completionCts = new CancellationTokenSource();
-            var combinedCts = CancellationTokenSource.CreateLinkedTokenSource(completionCts.Token, cancellationToken);
+            var combinedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 
             int? sampling = options.UseSampling;
 
@@ -452,18 +451,26 @@ namespace WatneyAstrometry.Core
                                     $"Starting search tasks in parallel. Running sampling subset {currentSubSetIndex + 1}/{numSubSets}");
 
                                 
+                                var successTcs = new TaskCompletionSource<SolveResult>(TaskCreationOptions.RunContinuationsAsynchronously);
                                 var searchTasks = searchQueue.Select(searchRun => WatneyTaskFactory.Instance.StartNew(() =>
                                     TrySolveSingle(imageDimensions, combinedCts, searchRun, countInFirstPass,
                                         quadDb,
                                         numSubSets, currentSubSetIndex, sortedImageStarQuads,
-                                        completionCts)));
-                                
+                                        successTcs))).ToArray();
+
                                 whenAllResult = Task.WhenAll(searchTasks);
-                                await whenAllResult;
+                                await Task.WhenAny(successTcs.Task, whenAllResult);
 
-                                var resultSet = GetMatchedAndUnmatchedSearchRuns(whenAllResult.Result);
-
-                                successfulSolveResult = resultSet.withMatches.FirstOrDefault(x => x != null && x.Success);
+                                var resultSet = default((SolveResult[] withMatches, SolveResult[] withoutMatches));
+                                if (successTcs.Task.IsCompletedSuccessfully)
+                                {
+                                    successfulSolveResult = successTcs.Task.Result;
+                                }
+                                else
+                                {
+                                    resultSet = GetMatchedAndUnmatchedSearchRuns(whenAllResult.Result);
+                                    successfulSolveResult = resultSet.withMatches.FirstOrDefault(x => x != null && x.Success);
+                                }
                                 continueSearching = successfulSolveResult == null && !combinedCts.Token.IsCancellationRequested;
                                 
                                 if (!continueSearching)
@@ -473,7 +480,6 @@ namespace WatneyAstrometry.Core
                                 // we're already using all database quads in our search.
                                 if (numSubSets == 1)
                                     continue;
-
 
                                 var potentialMatchQueue = resultSet.withMatches.Select(x => x.SearchRun).ToArray();
 
@@ -485,17 +491,18 @@ namespace WatneyAstrometry.Core
                                 // Console.WriteLine($"Continue searching, potential matches to try: {potentialMatchQueue.Length}");
                                 _logger.WriteInfo(
                                     $"Continue searching, potential matches to try: {potentialMatchQueue.Length}");
+                                var potentialSuccessTcs = new TaskCompletionSource<SolveResult>(TaskCreationOptions.RunContinuationsAsynchronously);
                                 var potentialMatchSearchTasks = potentialMatchQueue.Select(searchRun =>
                                     WatneyTaskFactory.Instance.StartNew(() =>
                                         TrySolveSingle(imageDimensions, combinedCts, searchRun,
                                             countInFirstPass,
                                             quadDb, 1, 0, sortedImageStarQuads,
-                                            completionCts)));
+                                            potentialSuccessTcs))).ToArray();
 
                                 whenAllResult = Task.WhenAll(potentialMatchSearchTasks);
-                                await whenAllResult;
+                                await Task.WhenAny(potentialSuccessTcs.Task, whenAllResult);
 
-                                successfulSolveResult = whenAllResult.Result.FirstOrDefault(x => x != null && x.Success);
+                                successfulSolveResult = potentialSuccessTcs.Task.IsCompletedSuccessfully ? potentialSuccessTcs.Task.Result : null;
                                 continueSearching = successfulSolveResult == null && !combinedCts.Token.IsCancellationRequested;
 
                                 if (successfulSolveResult != null)
@@ -570,8 +577,7 @@ namespace WatneyAstrometry.Core
 
                                 taskResult = TrySolveSingle(imageDimensions, combinedCts, searchRun, countInFirstPass,
                                     quadDb, numSubSets, currentSubSetIndex,
-                                    sortedImageStarQuads,
-                                    completionCts);
+                                    sortedImageStarQuads);
 
                                 serialSearches.Add(taskResult);
 
@@ -609,8 +615,7 @@ namespace WatneyAstrometry.Core
                             foreach (var searchRun in potentialMatchQueue)
                             {
                                 taskResult = TrySolveSingle(imageDimensions, combinedCts, searchRun, countInFirstPass,
-                                    quadDb, 1, 0, sortedImageStarQuads,
-                                    completionCts);
+                                    quadDb, 1, 0, sortedImageStarQuads);
 
                                 if (taskResult != null && taskResult.Success)
                                 {
@@ -690,9 +695,9 @@ namespace WatneyAstrometry.Core
         }
 
         private SolveResult TrySolveSingle(IImageDimensions imageDimensions, CancellationTokenSource cancellationCts, SearchRun searchRun,
-            int countInFirstPass, IQuadDatabase quadDb, int numSubSets, int subSetIndex, ImageStarQuad[] sortedImageStarQuads, CancellationTokenSource completionCts)
+            int countInFirstPass, IQuadDatabase quadDb, int numSubSets, int subSetIndex, ImageStarQuad[] sortedImageStarQuads, TaskCompletionSource<SolveResult> successTcs = null)
         {
-            if (cancellationCts.IsCancellationRequested)
+            if (cancellationCts.IsCancellationRequested || successTcs?.Task.IsCompleted == true)
                 return null;
 
             SolveResult taskResult = new SolveResult()
@@ -702,9 +707,8 @@ namespace WatneyAstrometry.Core
                 DiagnosticsData = new SolveDiagnosticsData() // this will mostly be filled outside this method.
             };
 
-            
-            Interlocked.Increment(ref _iterations);
-            var iteration = _iterations;
+            // atomic increment + assign to local variable for logging purposes.           
+            var iteration = Interlocked.Increment(ref _iterations);
             
             // Quads per degree
             var searchFieldSize = searchRun.RadiusDegrees * 2;
@@ -795,7 +799,7 @@ namespace WatneyAstrometry.Core
                 taskResult.MatchedQuads = improvedSolution.matches.Count;
                 taskResult.Solution = improvedSolution.solution;
                 taskResult.DiagnosticsData.MatchInstances = improvedSolution.matches;
-                completionCts.Cancel();
+                successTcs?.TrySetResult(taskResult);
                 return taskResult;
 
             }
