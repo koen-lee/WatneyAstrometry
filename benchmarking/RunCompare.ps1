@@ -2,8 +2,8 @@ $solverBase = "C:\Dev\WatneyAstrometry\src\WatneyAstrometry.SolverApp\bin\Releas
 $threadCounts = @(12)
 $modes = @("blind", "nearby")
 $variants = @(
-    @{ Name = "release_qdb3"; Exe = "net6.0\watney-solve.exe";  Config = "net10.0\watney-solve-config3.yml" },
-    @{ Name = "release_qdb4"; Exe = "net6.0\watney-solve.exe";  Config = "net10.0\watney-solve-config4.yml" },
+    @{ Name = "release_qdb3"; Exe = "net10.0\watney-solve.exe";  Config = "net10.0\watney-solve-config3.yml" },
+    @{ Name = "release_qdb4"; Exe = "net10.0\watney-solve.exe";  Config = "net10.0\watney-solve-config4.yml" },
     @{ Name = "publish_qdb3"; Exe = "net10.0\win-x64\publish\watney-solve.exe"; Config = "net10.0\watney-solve-config3.yml" },
     @{ Name = "publish_qdb4"; Exe = "net10.0\win-x64\publish\watney-solve.exe"; Config = "net10.0\watney-solve-config4.yml" }
 )

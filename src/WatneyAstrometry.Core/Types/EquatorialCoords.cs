@@ -91,13 +91,7 @@ namespace WatneyAstrometry.Core.Types
 
         private static double ToPositive(double ra)
         {
-            if (ra >= 0)
-                return ra;
-
-            while (ra < 0)
-                ra += 360;
-
-            return ra;
+            return ((ra % 360) + 360) % 360;
         }
 
         /// <summary>
